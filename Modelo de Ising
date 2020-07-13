@@ -1,0 +1,299 @@
+#include <stdio.h>
+#include <math.h>
+#include "gsl_rng.h"
+
+gsl_rng *tau; 
+
+int main ()
+{ 
+// Para guardar los ficheros 
+FILE *g2, *g3, *g4, *g5,*G;
+
+g2 = fopen("magnetizacion.txt", "w");
+g3 = fopen ("EnergiaPromedio.txt","w");
+g4 = fopen("CalorEspecifico.txt","w");
+//g5 =fopen("Correlacion.txt","w");
+
+//Generamos primero los números aleatorios 
+ 
+	double chi,chi1,p,T,B,remolino; 
+	extern gsl_rng *tau; 
+	int semilla=816870;
+	tau=gsl_rng_alloc(gsl_rng_taus);
+	gsl_rng_set(tau,semilla);
+	chi = gsl_rng_uniform(tau);  //Número aleatorio entre 0 y 1
+	chi1 = gsl_rng_uniform(tau);
+
+// Implementamos el código 
+	int Ncuad,i,j,k,Npasos,n,N,l,q,e;
+	int a,b,AE,N2;
+	int tam;
+
+	double Te[12];
+
+	Te[0] = 1.3; 
+	for(e=1;e<=11;e++)
+	{
+	Te[e] = Te[e-1] + 0.2;
+
+
+	N = 16;
+	n=N-1;
+	int mallaspin[N][N]; // Malla de N x N elementos (de 0 a n)
+	Ncuad=N*N;
+	Npasos= 10e6;
+
+
+// Definimos las variables para las magnitudes termodinamicas
+	int y,s,s1; 
+	double mn,Sum;
+	Sum = 0; 
+	mn =0; 
+	s =0; 
+	s1 = 0; //Variables de la magnetizacion
+
+	double ES,AEfilas, AEcolumnas,Eint;
+	AEcolumnas = 0;
+	Eint= 0;
+	AEfilas =0;
+
+	double Escuad,cv,Uncuad,Escuadprom,Ered,Eredsum;
+	Escuad = 0;
+	cv = 0;
+	Uncuad =0;
+	Escuadprom= 0;
+	Eredsum = 0;
+
+	double cor[N/2+1];
+	for (a=1;a<=(N/2);a++)
+	{
+	cor[a] = 0;
+	}
+
+ 
+
+//Definimos la malla ordenada de 1
+	for(i=0;i<=n;i++)
+	{
+		for(j=0;j<=n;j++)
+		{
+		mallaspin[i][j]= 1;
+		}
+	}
+
+
+
+
+//Se hace el algoritmo para la malla cada paso MonteCarlo 
+		for(i=0;i<=Npasos;i++)
+		{
+		Ered = 0;
+ 
+ 			for(j=0;j<Ncuad;j++)
+			{
+			a=gsl_rng_uniform_int(tau,n);
+			b=gsl_rng_uniform_int(tau,n);
+
+			//Hay que arreglar los bordes por si cae en uno (Condiciones de Contorno) 
+			AE = 2*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[a-1][b] + mallaspin[a][b+1] + mallaspin[a][b-1]);
+			
+			if(a==0 && b!=0 && b!=n)
+			{
+			AE = 2*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[n][b] + mallaspin[a][b+1] + mallaspin[a][b-1]); 
+			}
+
+			if(a!=0 && b==0 && a!=n)
+			{
+			AE = 2*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[a-1][b] + mallaspin[a][b+1] + mallaspin[a][n]); 
+			}
+
+			if(a==0 && b==0)
+			{
+			AE = 2*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[n][b] + mallaspin[a][b+1] + mallaspin[a][n]);
+			}
+
+			if(a==n && b==n)
+			{
+			AE = 2*mallaspin[a][b]*(mallaspin[0][b] + mallaspin[a-1][b] + mallaspin[a][0] + mallaspin[a][b-1]);
+			}
+
+			if(a!=n && b==n && a!=0)
+			{
+			AE = 2*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[a-1][b] + mallaspin[a][0] + mallaspin[a][b-1]);
+			}
+
+			if(a==n && b!=0 && b!=n)
+			{
+			AE = 2*mallaspin[a][b]*(mallaspin[0][b] + mallaspin[a-1][b] + mallaspin[a][b+1] + mallaspin[a][b-1]); 
+			}
+
+			if(a==0 && b==n)
+			{
+			AE = 2*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[n][b] + mallaspin[a][0] + mallaspin[a][b-1]);
+			}
+
+			if(a==n && b==0)
+			{
+			AE = 2*mallaspin[a][b]*(mallaspin[0][b] + mallaspin[a-1][b] + mallaspin[a][b+1] + mallaspin[a][n]);
+			}
+
+
+
+//Trabajamos con la probabilidad
+
+
+			p = exp(-AE/Te[e]);
+			remolino = gsl_rng_uniform(tau);
+ 
+			if (p>1) 
+			{
+			p=1;
+			}
+
+			if (remolino<p)
+			{
+			mallaspin[a][b] = -mallaspin[a][b]; 
+			}
+
+
+
+			} // Cierra los N*N cambios de un paso 
+
+
+
+//Calculamos las magnitudes promedio cada 100 pMC
+		if(fmod(i,100)==0)
+		{
+		s = 0;
+        Ered = 0; 
+
+//La magnetizacion 
+		for(k=0;k<N;k++)
+		{
+			for(l=0;l<N;l++)
+			{
+			s1 = mallaspin[k][l];
+			s = (s + s1);//Magnetizacion de una red
+			}
+		}
+
+		Sum = Sum + abs(s)*1.0/Ncuad;
+
+
+
+//Energia promedio
+		for(a=0;a<N;a++) 
+		{
+			for(b=0;b<N;b++) 
+			{
+
+			AE = -0.5*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[a-1][b] + mallaspin[a][b+1] + mallaspin[a][b-1]);
+
+			if(a==0 && b!=0 && b!=n)
+			{
+			AE = -0.5*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[n][b] + mallaspin[a][b+1] + mallaspin[a][b-1]); 
+			}
+
+			if(a!=0 && b==0 && a!=n)
+			{
+			AE = -0.5*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[a-1][b] + mallaspin[a][b+1] + mallaspin[a][n]); 
+			}
+
+			if(a==0 && b==0)
+			{
+			AE = -0.5*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[n][b] + mallaspin[a][b+1] + mallaspin[a][n]);
+			}
+
+			if(a==n && b==n)
+			{
+			AE = -0.5*mallaspin[a][b]*(mallaspin[0][b] + mallaspin[a-1][b] + mallaspin[a][0] + mallaspin[a][b-1]);
+			}
+
+			if(a!=n && b==n && a!=0)
+			{
+			AE = -0.5*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[a-1][b] + mallaspin[a][0] + mallaspin[a][b-1]);
+			}
+
+			if(a==n && b!=0 && b!=n)
+			{
+			AE = -0.5*mallaspin[a][b]*(mallaspin[0][b] + mallaspin[a-1][b] + mallaspin[a][b+1] + mallaspin[a][b-1]); 
+			}
+
+			if(a==0 && b==n)
+			{
+			AE = -0.5*mallaspin[a][b]*(mallaspin[a+1][b] + mallaspin[n][b] + mallaspin[a][0] + mallaspin[a][b-1]);
+			}
+
+			if(a==n && b==0)
+			{
+			AE = -0.5*mallaspin[a][b]*(mallaspin[0][b] + mallaspin[a-1][b] + mallaspin[a][b+1] + mallaspin[a][n]);
+			}
+
+			AEcolumnas = AE + AEcolumnas; //Energia de la red (Suma de E de cada spin), la sumamos toda para tener el promedio 
+			Ered = Ered + AE;
+
+			}
+
+
+		}
+
+		Eredsum = Ered*Ered + Eredsum; //Suma de la energia de cada red al cuadrado */
+
+//Funcion de correlacion
+		for(a=0;a<(N);a++) //Esto barre la red 
+		{
+			for(b=0;b<N;b++)
+			{
+				for(q=1;q<=(N/2);q++)
+				{
+
+				if(q<(N-a))
+				{
+				N2 = mallaspin[a][b]*mallaspin[a+q][b];
+				}
+				if(q>(N-a))
+				{
+				N2 = mallaspin[a][b]*mallaspin[q-(N-a)][b]; 
+				}
+
+				cor[q] = cor[q] + N2; 
+				}
+			}
+		}
+
+
+		} // Fin de las medidas cada 100 pMc
+
+
+
+			}// Fin de los pasos MonteCarlo
+
+
+//Magnetizacion final
+		mn = Sum*100*1.0/(Npasos); 
+		fprintf(g2,"Para T %lf\t mn  %lf\n",Te[e],mn);
+
+//Energia interna final 
+		Eint = AEcolumnas*1.0*100/(Ncuad*Npasos);
+		fprintf(g3,"Para  T %lf\t la energia promedio %lf\n",Te[e],Eint);
+
+// Calor específico final
+		double Eredsumprom;
+ 		Eredsumprom = Eredsum*100*1.0/Npasos; 
+		Uncuad = (AEcolumnas*100*1.0/Npasos)*(AEcolumnas*100*1.0/Npasos); 
+		cv = (Eredsumprom - Uncuad)*1.0/(Ncuad*Te[e]*Te[e]);
+		fprintf(g4,"Para T %lf\t el calor especifico %lf\n",Te[e],cv);
+        
+// Funcion de correlacion;
+		/*for(q=1; q<=(N/2);q++)
+		{
+		cor[q] = cor[q]*100*1.0/(Npasos*Ncuad);
+		fprintf(g5,"%lf\t %lf\n",Te[e],cor[q]);
+		}
+		fprintf(g5,"\n\n");
+		//fprintf(G,"\n"); */
+
+	} //Fin del bucle de la temperatura 
+} //Fin de la funcion principal 
+
+                
